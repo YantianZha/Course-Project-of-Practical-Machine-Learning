@@ -1,0 +1,111 @@
+---
+title: "Course Project of Practical Machine Learning"
+author: "Zha,Yantian"
+date: "February 19, 2015"
+output: html_document
+---
+
+##Background
+#####Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how *much* of a particular activity they do, but they rarely quantify *how well they do it*. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+#####Helpful links for this project:
+1. Overall: *http://groupware.les.inf.puc-rio.br/public/papers/2013.Velloso.QAR-WLE.pdf*
+2. For training data: *https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv*
+3. For testing data: *https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv*
+
+##Data Retrieval
+```{r}
+if (!file.exists("pml_training.csv")) {
+    download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml_training.csv")
+}
+if (!file.exists("pml_testing.csv")) {
+    download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml_testing.csv")
+}
+
+Training <- read.csv("pml_training.csv", header = TRUE, na.strings = c("NA",""))
+Testing <- read.csv("pml_testing.csv", header = TRUE, na.strings = c("NA",""))
+```
+
+##Summary of Data
+```{r}
+dim(Training)
+summary(Training)
+table(Training$classe)
+```
+
+##Remove zero covariates && Remove variables with to many missing Values
+#####Obviously there exist lots of NAs that we need to clear, but before doing that I want to firstly remove the near-zero variables.
+```{r}
+library(caret)
+nsv <- nearZeroVar(Training, saveMetrics = T)
+Training <- Training[, !nsv$nzv]
+#Remove columns (variables) that have 0.9% NAs
+nav <- sapply(colnames(Training), function(x) if(sum(is.na(Training[, x])) > 0.9*nrow(Training)){return(1)}else{return(0)})
+TrainingX <- Training[, !nav]
+```
+
+##Data Splicing
+#####In order to train classifiers we have to create a training set (60%) and a testing set (40%) from the preprocessed Training dataset, considering that the size of dataset is not very large.
+```{r}
+set.seed(999)
+inTrain <- createDataPartition(y=TrainingX$classe,p=0.6,list=FALSE)
+training <- TrainingX[inTrain,];testing <- TrainingX[-inTrain,]
+dim(training);dim(testing)
+```
+
+##Model One: Random Forest
+#####After complete the training process we also need to calculate out the accuracy. Later we will compare the accuracy of model one to that of the model two.
+```{r}
+#Use random forest model with cross validation
+ModelFit1 <- train(classe ~ .,data=training,method="rf",trControl=trainControl(method="cv", number=4),verbose=F)
+ModelFit1
+predictions1 <- predict(ModelFit1, testing)
+Confusion_Matrix1 <- confusionMatrix(predictions1,testing$classe)
+str(Confusion_Matrix1)
+overall <- Confusion_Matrix1$overall
+overall.accuracy <- overall['Accuracy']
+AcM1 <- overall.accuracy
+AcM1
+plot(ModelFit1, ylim = c(0.5, 1))
+```
+
+##Model Two: Support Vector Machine
+#####After complete the training process we also need to calculate out the accuracy. Later we will compare the accuracy of model two to that of the model one.
+```{r}
+#Use support vector machine model with cross validation
+ModelFit2 <- train(classe ~ .,data = training,method = "svmRadial",trControl=trainControl(method="cv",number=4),verbose=F)
+predictions2 <- predict(ModelFit2, testing)
+Confusion_Matrix2 <- confusionMatrix(predictions2,testing$classe)
+str(Confusion_Matrix2)#Displaying the internal structure of "Confusion_Matrix2"
+overall <- Confusion_Matrix2$overall#The "Accuracy" is in the "overall" vector
+overall.accuracy <- overall['Accuracy']#Get the "Accuracy"
+AcM2 <- overall.accuracy
+AcM2
+plot(ModelFit2, ylim = c(0.5, 1))
+```
+
+##Select the Model with the Highest Accuracy
+```{r}
+Final_Model <- if (AcM1>AcM2) ModelFit1 else ModelFit2
+R <- if (AcM1>AcM2) "Model One" else "Model Two"
+#Get the most optimized model
+R
+Final_Model$finalModel
+```
+
+##Get Predictions for the Test Set and Write Them to Files
+#####This is the final prediction based on the downloaded testing dataset.
+```{r}
+prediction <- as.character(predict(Final_Model, Testing))
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("~/results/problem_id_", i, ".txt")
+    write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, col.names = FALSE)
+  }
+}
+pml_write_files(prediction)
+```
+
+##Conclusion and Discussion
+#####The accuracy plot for model one suggests that __random forest__ can __perfectly__ predict the future cases based on prior knowledge (training data), and the __out of sample error__ is very small. That said, some may wish to use PCA to preprocess the data. However, what I discovered in this project is that using PCA can decrease accuracy to a certain degree, in large part because, using PCA can lose some spatial information which is important for classification and model training. You might want to retain more dimensions so that SVM retains more information.
