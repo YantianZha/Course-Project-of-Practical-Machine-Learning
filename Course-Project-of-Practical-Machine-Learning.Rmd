@@ -1,3 +1,4 @@
+
 ---
 title: "Course Project of Practical Machine Learning"
 author: "Zha,Yantian"
@@ -15,6 +16,7 @@ output: html_document
 
 ##Data Retrieval
 ```{r}
+library(caret)
 if (!file.exists("pml_training.csv")) {
     download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml_training.csv")
 }
@@ -36,12 +38,25 @@ table(Training$classe)
 ##Remove zero covariates && Remove variables with to many missing Values
 #####Obviously there exist lots of NAs that we need to clear, but before doing that I want to firstly remove the near-zero variables.
 ```{r}
-library(caret)
 nsv <- nearZeroVar(Training, saveMetrics = T)
 Training <- Training[, !nsv$nzv]
+nsv1 <- nearZeroVar(Testing, saveMetrics = T)
+Testing <- Testing[, !nsv1$nzv]
+```
+
+#####For Downloaded Training Set
+```{r}
 #Remove columns (variables) that have 0.9% NAs
-nav <- sapply(colnames(Training), function(x) if(sum(is.na(Training[, x])) > 0.9*nrow(Training)){return(1)}else{return(0)})
+nav <- sapply(colnames(Training), function(x) if(sum(is.na(Training[, x])) > 0.9*nrow(Training)){return(T)}else{return(F)})
 TrainingX <- Training[, !nav]
+TrainingX <- subset(TrainingX, select=-c(X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
+```
+
+#####For Downloaded Testing Set
+```{r}
+nav1 <- sapply(colnames(Testing), function(x) if(sum(is.na(Testing[, x])) > 0.9*nrow(Testing)){return(T)}else{return(F)})
+TestingX <- Testing[, !nav1]
+TestingX <- subset(TestingX, select=-c(X, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp))
 ```
 
 ##Data Splicing
@@ -96,7 +111,8 @@ Final_Model$finalModel
 ##Get Predictions for the Test Set and Write Them to Files
 #####This is the final prediction based on the downloaded testing dataset.
 ```{r}
-prediction <- as.character(predict(Final_Model, Testing))
+predict(Final_Model, TestingX)
+prediction <- as.character(predict(Final_Model, TestingX))
 pml_write_files = function(x){
   n = length(x)
   for(i in 1:n){
@@ -109,3 +125,4 @@ pml_write_files(prediction)
 
 ##Conclusion and Discussion
 #####The accuracy plot for model one suggests that __random forest__ can __perfectly__ predict the future cases based on prior knowledge (training data), and the __out of sample error__ is very small. That said, some may wish to use PCA to preprocess the data. However, what I discovered in this project is that using PCA can decrease accuracy to a certain degree, in large part because, using PCA can lose some spatial information which is important for classification and model training. You might want to retain more dimensions so that SVM retains more information.
+
